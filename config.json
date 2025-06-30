@@ -5,13 +5,13 @@
     "allowInbox": true,
     "commandDisabled": [],
     "eventDisabled": [],
-    "EMAIL": "your_facebook_email@example.com",
-    "PASSWORD": "your_facebook_password",
+    "EMAIL": "61571374393707",
+    "PASSWORD": "abalunan1",
     "OTPKEY": "",
     "BOTNAME": "CarX Shop",
     "PREFIX": "/",
     "ADMINBOT": [
-        "YOUR_FACEBOOK_ID_HERE"
+        "100052951819398"
     ],
     "PAYMENT_INFO": "• GPay/UPI: YOUR_UPI_ID_HERE\n• Name: YOUR_NAME_HERE",
     "DATABASE": {
