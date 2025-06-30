@@ -54,7 +54,7 @@ module.exports = function(data) {
             return;
         }
 
-        const isAdmin = global.config.ADMINBOT.includes(senderID);
+        const isAdmin = global.config.ADMINBOT.includes(senderID.toString());
         if (command.config.hasPermssion === 2 && !isAdmin) {
             return api.sendMessage("Only bot administrators can use this command.", threadID, messageID);
         }
