@@ -1,7 +1,7 @@
 module.exports.config = { name: "viewsets", commandCategory: "shop", hasPermssion: 0, cooldowns: 5 };
 module.exports.run = async function({ api, event, models }) {
     try {
-        const Set = models.get('sets');
+        const Set = models.sets;
         if (!Set) return api.sendMessage("Database model for sets is not defined.", event.threadID);
         const allSets = await Set.findAll();
         if (allSets.length === 0) return api.sendMessage("Sorry, there are no sets available right now.", event.threadID);
