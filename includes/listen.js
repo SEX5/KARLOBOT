@@ -2,11 +2,7 @@ module.exports = function(data) {
     const { api, models } = data;
 
     return function(event) {
-        if (!event) {
-            console.log("No event received");
-            return;
-        }
-        console.log("Received event:", event);
+        if (!event) return;
 
         // --- 1. HANDLE CONVERSATIONAL REPLIES ---
         if (event.type === "message" && global.client.handleReply.length > 0) {
@@ -14,9 +10,11 @@ module.exports = function(data) {
                 if (reply.author === event.senderID && event.messageReply?.messageID === reply.messageID) {
                     const commandModule = global.client.commands.get(reply.name);
                     if (commandModule && commandModule.handleReply) {
+                        // Remove the reply entry after processing
                         const index = global.client.handleReply.findIndex(item => item.messageID === reply.messageID);
                         if (index > -1) global.client.handleReply.splice(index, 1);
                         try {
+                            // Timeout to clear stale reply after 5 minutes
                             setTimeout(() => {
                                 global.client.handleReply = global.client.handleReply.filter(h => h.messageID !== reply.messageID);
                             }, 5 * 60 * 1000);
@@ -49,12 +47,9 @@ module.exports = function(data) {
             }
         }
         
-        if (event.type !== "message" || !event.body) {
-            console.log("Event not a message or no body:", event.type, event.body);
-            return;
-        }
+        if (event.type !== "message" || !event.body) return;
 
-        const { body, senderID, threadID, messageID } = event;
+        const { body, senderID, threadID, messageID, isGroup } = event;
         const prefix = global.config.PREFIX;
 
         // --- 3. AUTO-REPLY FOR NON-PREFIXED MESSAGES ---
@@ -71,7 +66,6 @@ module.exports = function(data) {
         
         const command = global.client.commands.get(commandName);
         if (!command) {
-            console.log(`Command not found: ${commandName}`);
             return api.sendMessage(`❌ Command "${commandName}" not found.\n\nPlease use "${prefix}help" to see the list of available commands.`, threadID, messageID);
         }
 
@@ -81,6 +75,7 @@ module.exports = function(data) {
         }
         
         try {
+            // Apply cooldown
             const key = `${senderID}_${command.config.name}`;
             const cooldown = command.config.cooldowns || 5;
             const now = Date.now();
@@ -90,7 +85,7 @@ module.exports = function(data) {
             }
             global.client.cooldowns.set(key, now);
 
-            console.log(`Executing command: ${command.config.name} with args: ${args}`);
+            // Run command
             command.run({ api, event, args, models });
         } catch (e) {
             console.error(`Error executing command ${command.config.name}:`, e);
