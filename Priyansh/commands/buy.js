@@ -3,7 +3,7 @@ module.exports.config = { name: "buy", commandCategory: "shop", hasPermssion: 0,
 module.exports.handleReply = async function({ api, event, handleReply, models }) {
     if (event.senderID !== handleReply.author) return;
 
-    const Set = models.get('sets');
+    const Set = models.sets;
     const userReply = event.body;
     let { step, orderData } = handleReply;
     api.unsendMessage(handleReply.messageID);
