@@ -1,4 +1,4 @@
-// --- Priyansh.js (FINAL CORRECTED VERSION) ---
+// --- Priyansh.js (FINAL, CORRECTED VERSION) ---
 
 const { readdirSync, readFileSync, writeFileSync, existsSync } = require("fs-extra");
 const { join, resolve } = require("path");
@@ -28,10 +28,10 @@ try {
 }
 
 // --- INITIALIZE DATABASE ---
-const { Sequelize, sequelize } = require("./includes/database")(global.config.DATABASE); // <-- THE FIX IS HERE
+const { Sequelize, sequelize } = require("./includes/database")(global.config.DATABASE);
 
 // --- LOGIN FUNCTION ---
-function onBotLogin(models) {
+function onBotLogin({ models }) {
     const appStateFile = resolve(join(global.client.mainPath, global.config.APPSTATEPATH || "appstate.json"));
     let loginOptions = {};
 
@@ -91,17 +91,20 @@ function onBotLogin(models) {
 (async () => {
     try {
         await sequelize.authenticate();
-        const models = require('./includes/database/model')({ Sequelize, sequelize });
-
-        models.define('sets', {
+        
+        // Define the 'sets' model directly on the sequelize instance
+        const setsModel = sequelize.define('sets', {
             name: { type: Sequelize.STRING, primaryKey: true, allowNull: false },
             price: { type: Sequelize.FLOAT, allowNull: false },
             description: { type: Sequelize.TEXT, allowNull: true }
         });
+
         await sequelize.sync({ force: false });
 
-        logger.loader("Database connected successfully.", '[ DATABASE ]');
-        onBotLogin(models);
+        logger.loader("Database connected and models synchronized.", '[ DATABASE ]');
+        
+        // Pass the defined model to the bot
+        onBotLogin({ models: { sets: setsModel } });
 
     } catch (error) {
         logger.loader(`Database connection failed: ${error}`, '[ DATABASE ]');
