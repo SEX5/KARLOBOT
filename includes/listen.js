@@ -4,92 +4,70 @@ module.exports = function(data) {
     return function(event) {
         if (!event) return;
 
-        // --- 1. HANDLE CONVERSATIONAL REPLIES ---
-        if (event.type === "message" && global.client.handleReply.length > 0) {
+        // Handle replies for conversational commands
+        if (global.client.handleReply.length > 0 && event.type === "message_reply") {
             for (const reply of global.client.handleReply) {
-                if (reply.author === event.senderID && event.messageReply?.messageID === reply.messageID) {
-                    const commandModule = global.client.commands.get(reply.name);
-                    if (commandModule && commandModule.handleReply) {
-                        // Remove the reply entry after processing
-                        const index = global.client.handleReply.findIndex(item => item.messageID === reply.messageID);
-                        if (index > -1) global.client.handleReply.splice(index, 1);
+                if (reply.messageID === event.messageReply.messageID) {
+                    const module = global.client.commands.get(reply.name);
+                    if (module && module.handleReply) {
                         try {
-                            // Timeout to clear stale reply after 5 minutes
-                            setTimeout(() => {
-                                global.client.handleReply = global.client.handleReply.filter(h => h.messageID !== reply.messageID);
-                            }, 5 * 60 * 1000);
-                            return commandModule.handleReply({ ...data, event, handleReply: reply });
+                            return module.handleReply({ ...data, event, handleReply: reply });
                         } catch (e) {
-                            console.error(`Error in handleReply for ${reply.name}:`, e);
-                            api.sendMessage("An error occurred while processing your reply. Please try again or contact the admin.", event.threadID, event.messageID);
+                            return console.error(`Error in handleReply for ${reply.name}:`, e);
                         }
                     }
-                    return;
                 }
             }
         }
 
-        // --- 2. HANDLE MENU REACTIONS ---
-        if (event.type === "message_reaction" && global.client.handleReaction.length > 0) {
+        // Handle reactions for menu-like interactions
+        if (global.client.handleReaction.length > 0 && event.type === "message_reaction") {
             for (const reaction of global.client.handleReaction) {
-                if (reaction.messageID === event.messageID && reaction.author === event.userID) {
-                    const commandModule = global.client.commands.get(reaction.name);
-                    if (commandModule && commandModule.handleReaction) {
+                if (reaction.messageID === event.messageID) {
+                    const module = global.client.commands.get(reaction.name);
+                    if (module && module.handleReaction) {
                         try {
-                            return commandModule.handleReaction({ ...data, event, handleReaction: reaction });
+                            return module.handleReaction({ ...data, event, handleReaction: reaction });
                         } catch (e) {
-                            console.error(`Error in handleReaction for ${reaction.name}:`, e);
-                            api.sendMessage("An error occurred while processing your reaction. Please try again or contact the admin.", event.threadID);
+                            return console.error(`Error in handleReaction for ${reaction.name}:`, e);
                         }
                     }
-                    return;
                 }
             }
         }
         
         if (event.type !== "message" || !event.body) return;
 
-        const { body, senderID, threadID, messageID, isGroup } = event;
+        const { body, senderID, threadID, messageID } = event;
         const prefix = global.config.PREFIX;
-
-        // --- 3. AUTO-REPLY FOR NON-PREFIXED MESSAGES ---
-        if (!body.startsWith(prefix) && senderID !== api.getCurrentUserID()) {
-            const autoReplyMessage = `Welcome to ${global.config.BOTNAME}! Please use the prefix "${prefix}" for commands (e.g., ${prefix}help).`;
-            return api.sendMessage(autoReplyMessage, threadID, messageID);
+        const botName = global.config.BOTNAME;
+        
+        if (!body.startsWith(prefix)) {
+            if (body.toLowerCase().includes(botName.toLowerCase())) {
+                return api.sendMessage(`My prefix is "${prefix}". Type "${prefix}help" to see what I can do!`, threadID, messageID);
+            }
+            return;
         }
-
-        // --- 4. PROCESS COMMANDS ---
-        if (!body.startsWith(prefix)) return;
         
         const args = body.slice(prefix.length).trim().split(/ +/);
         const commandName = args.shift().toLowerCase();
         
         const command = global.client.commands.get(commandName);
+
         if (!command) {
-            return api.sendMessage(`❌ Command "${commandName}" not found.\n\nPlease use "${prefix}help" to see the list of available commands.`, threadID, messageID);
+            return api.sendMessage(`Command not found. Please use "${prefix}help" to see available commands.`, threadID, messageID);
         }
 
         const isAdmin = global.config.ADMINBOT.includes(senderID);
         if (command.config.hasPermssion === 2 && !isAdmin) {
-            return api.sendMessage("You do not have permission to use this command.", threadID, messageID);
+            return api.sendMessage("Only bot administrators can use this command.", threadID, messageID);
         }
         
         try {
-            // Apply cooldown
-            const key = `${senderID}_${command.config.name}`;
-            const cooldown = command.config.cooldowns || 5;
-            const now = Date.now();
-            const lastUsed = global.client.cooldowns.get(key) || 0;
-            if (now - lastUsed < cooldown * 1000) {
-                return api.sendMessage(`Please wait ${cooldown} seconds before using ${command.config.name} again!`, threadID, messageID);
-            }
-            global.client.cooldowns.set(key, now);
-
-            // Run command
             command.run({ api, event, args, models });
         } catch (e) {
             console.error(`Error executing command ${command.config.name}:`, e);
-            api.sendMessage(`An error occurred while executing the '${command.config.name}' command. Please contact the admin.`, threadID, messageID);
+            api.sendMessage(`An error occurred while executing the command: ${e.message}`, threadID, messageID);
         }
     };
 };
