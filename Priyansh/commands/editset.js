@@ -5,7 +5,7 @@ module.exports.handleReply = async function({ api, event, handleReply, models })
     if (event.senderID !== author) return;
     api.unsendMessage(handleReply.messageID);
     
-    const Set = models.get('sets');
+    const Set = models.sets;
     let { setData } = handleReply;
     const userInput = event.body;
 
