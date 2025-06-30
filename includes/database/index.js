@@ -1,41 +1,17 @@
-const Sequelize = require("sequelize");
-const { resolve } = require("path");
-const { DATABASE } = global.config;
+// --- includes/database/index.js (UPDATED) ---
+const { Sequelize } = require('sequelize');
 
-var dialect = Object.keys(DATABASE), storage;
-dialect = dialect[0]; 
-storage = resolve(__dirname, `../${DATABASE[dialect].storage}`);
+// Export a function that initializes Sequelize
+module.exports = (config) => {
+    if (!config || !config.sqlite) {
+        throw new Error("Database configuration is missing or invalid in config.json");
+    }
 
-module.exports.sequelize = new Sequelize({
-  dialect,
-  storage,
-  pool: {
-    max: 20,
-    min: 0,
-    acquire: 60000,
-    idle: 20000
-  },
-  retry: {
-    match: [
-      /SQLITE_BUSY/,
-    ],
-    name: 'query',
-    max: 20
-  },
-  logging: false,
-  transactionType: 'IMMEDIATE',
-  define: {
-    underscored: false,
-    freezeTableName: true,
-    charset: 'utf8',
-    dialectOptions: {
-      collate: 'utf8_general_ci'
-    },
-    timestamps: true
-  },
-  sync: {
-    force: false
-  }
-});
+    const sequelize = new Sequelize({
+        dialect: 'sqlite',
+        storage: config.sqlite.storage,
+        logging: false // Set to true to see SQL queries in console
+    });
 
-module.exports.Sequelize = Sequelize;
+    return { Sequelize, sequelize };
+};
