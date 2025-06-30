@@ -1,4 +1,4 @@
-// --- includes/listen.js (FINAL, RE-ORDERED VERSION) ---
+// --- includes/listen.js (FINAL VERSION - No Prefix, Private Chat Enabled) ---
 
 module.exports = function(data) {
     const { api, models } = data;
@@ -6,28 +6,30 @@ module.exports = function(data) {
     return function(event) {
         if (!event) return;
 
-        // --- 1. PRIORITY: HANDLE CONVERSATIONAL REPLIES ---
-        // This block now runs FIRST.
-        if (event.type === "message_reply" && global.client.handleReply.length > 0) {
+        // --- 1. HANDLE CONVERSATIONAL REPLIES & MESSAGES ---
+        if ((event.type === "message" || event.type === "message_reply") && global.client.handleReply.length > 0) {
             for (const reply of global.client.handleReply) {
-                // Check if the user is replying to a message the bot is waiting on.
-                if (reply.messageID === event.messageReply.messageID) {
-                    // Make sure the person replying is the person who started the conversation.
-                    if (reply.author !== event.senderID) return;
-
+                // For a conversation, we only care that it's the right person in the right chat.
+                if (reply.author === event.senderID && reply.threadID === event.threadID) {
                     const commandModule = global.client.commands.get(reply.name);
+                    
                     if (commandModule && commandModule.handleReply) {
                         try {
+                            // Find and remove this specific reply from the global queue
+                            const  index = global.client.handleReply.findIndex(item => item.messageID === reply.messageID && item.author === reply.author);
+                            if (index > -1) {
+                                global.client.handleReply.splice(index, 1);
+                            }
                             return commandModule.handleReply({ ...data, event, handleReply: reply });
                         } catch (e) {
                             console.error(`Error in handleReply for ${reply.name}:`, e);
                         }
                     }
-                    return; // Important: Stop further processing once a reply is handled.
+                    return; 
                 }
             }
         }
-
+        
         // --- 2. HANDLE MENU REACTIONS ---
         if (event.type === "message_reaction" && global.client.handleReaction.length > 0) {
             for (const reaction of global.client.handleReaction) {
@@ -44,15 +46,14 @@ module.exports = function(data) {
                 }
             }
         }
-        
-        // --- 3. PROCESS NEW COMMANDS ---
+
+        // --- 3. PROCESS NEW COMMANDS (ONLY IF A PREFIX IS USED) ---
         if (event.type !== "message" || !event.body) return;
 
         const { body, senderID, threadID, messageID } = event;
         const prefix = global.config.PREFIX;
-        
-        // If the message doesn't start with the prefix, ignore it.
-        // The prefix hint logic is removed for simplicity to solve the main issue.
+
+        // Only check for commands if the message starts with a prefix
         if (!body.startsWith(prefix)) return;
         
         const args = body.slice(prefix.length).trim().split(/ +/);
@@ -61,6 +62,7 @@ module.exports = function(data) {
         const command = global.client.commands.get(commandName);
 
         if (!command) {
+            // If it started with a prefix but wasn't a valid command, inform the user.
             return api.sendMessage(`❌ Command not found.\n\nPlease use "${prefix}help" to see the list of available commands.`, threadID, messageID);
         }
 
