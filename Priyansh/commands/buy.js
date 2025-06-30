@@ -1,5 +1,3 @@
-// --- Priyansh/commands/buy.js (CORRECTED VERSION) ---
-
 module.exports.config = {
     name: "buy",
     commandCategory: "shop",
@@ -17,15 +15,21 @@ module.exports.handleReply = async function({ api, event, handleReply, models })
     const userReply = event.body;
     let { step, orderData } = handleReply;
 
+    // Timeout mechanism: Remove handleReply after 5 minutes
+    setTimeout(() => {
+        global.client.handleReply = global.client.handleReply.filter(h => h.messageID !== handleReply.messageID);
+    }, 5 * 60 * 1000);
+
     switch (step) {
         case "GET_EMAIL":
             if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userReply)) {
-                return api.sendMessage("That doesn't look like a valid email. Please try again.", event.threadID, event.messageID);
+                return api.sendMessage("That doesn't look like a valid email. Please reply to this message with a valid email address.", event.threadID, (err, info) => {
+                    global.client.handleReply.push({ name: module.exports.config.name, messageID: info.messageID, author: event.senderID, step: "GET_EMAIL", orderData });
+                });
             }
             orderData.email = userReply;
-            // Ask for the next piece of info
-            return api.sendMessage("Great! Now, what password would you like for the account?", event.threadID, (err, info) => {
-                global.client.handleReply.push({ name: this.config.name, messageID: info.messageID, author: event.senderID, step: "GET_PASSWORD", orderData });
+            return api.sendMessage("Great! Now, please reply to this message with the password you would like for the account.", event.threadID, (err, info) => {
+                global.client.handleReply.push({ name: module.exports.config.name, messageID: info.messageID, author: event.senderID, step: "GET_PASSWORD", orderData });
             });
 
         case "GET_PASSWORD":
@@ -33,45 +37,49 @@ module.exports.handleReply = async function({ api, event, handleReply, models })
             const allSets = await Set.findAll();
             if (allSets.length === 0) {
                 api.sendMessage("Sorry, there are no sets available right now.", event.threadID, event.messageID);
-                return; // End the conversation
+                return;
             }
 
-            let setList = "Please choose a set by replying with its number:\n\n";
+            let setList = "Please reply to this message with the number of the set you want to buy:\n\n";
             allSets.forEach((set, index) => {
                 setList += `${index + 1}. **${set.name}** - $${set.price}\n`;
             });
             
             orderData.availableSets = allSets.map(s => s.get({ plain: true }));
             return api.sendMessage(setList, event.threadID, (err, info) => {
-                global.client.handleReply.push({ name: this.config.name, messageID: info.messageID, author: event.senderID, step: "CHOOSE_SET", orderData });
+                global.client.handleReply.push({ name: module.exports.config.name, messageID: info.messageID, author: event.senderID, step: "CHOOSE_SET", orderData });
             });
 
         case "CHOOSE_SET":
             const choice = parseInt(userReply, 10) - 1;
             if (isNaN(choice) || !orderData.availableSets[choice]) {
-                return api.sendMessage("Invalid choice. Please reply with a valid number from the list.", event.threadID, event.messageID);
+                return api.sendMessage("Invalid choice. Please reply to this message with a valid number from the list.", event.threadID, (err, info) => {
+                    global.client.handleReply.push({ name: module.exports.config.name, messageID: info.messageID, author: event.senderID, step: "CHOOSE_SET", orderData });
+                });
             }
             orderData.chosenSet = orderData.availableSets[choice];
             const paymentDetails = `You have chosen: **${orderData.chosenSet.name}**\n\n` +
-                                   `Please send **$${orderData.chosenSet.price}** to:\n${global.config.PAYMENT_INFO}\n\n` +
-                                   `After paying, please reply with a screenshot of the receipt.`;
+                                  `Please send **$${orderData.chosenSet.price}** to:\n${global.config.PAYMENT_INFO}\n\n` +
+                                  `After paying, please reply to this message with a screenshot of the receipt.`;
             return api.sendMessage(paymentDetails, event.threadID, (err, info) => {
-                global.client.handleReply.push({ name: this.config.name, messageID: info.messageID, author: event.senderID, step: "PAYMENT_PROOF", orderData });
+                global.client.handleReply.push({ name: module.exports.config.name, messageID: info.messageID, author: event.senderID, step: "PAYMENT_PROOF", orderData });
             });
 
         case "PAYMENT_PROOF":
             if (!event.attachments || event.attachments.length === 0 || event.attachments[0].type !== "photo") {
-                return api.sendMessage("That was not a photo. Please reply with a screenshot of your payment.", event.threadID, event.messageID);
+                return api.sendMessage("That was not a photo. Please reply to this message with a screenshot of your payment.", event.threadID, (err, info) => {
+                    global.client.handleReply.push({ name: module.exports.config.name, messageID: info.messageID, author: event.senderID, step: "PAYMENT_PROOF", orderData });
+                });
             }
             
             try {
                 const adminID = global.config.ADMINBOT[0];
                 const orderMessage = `🎉 **New Order Received!** 🎉\n\n` +
-                                     `**From User:** ${event.senderID}\n` +
-                                     `**Email:** ${orderData.email}\n` +
-                                     `**Password:** ${orderData.password}\n` +
-                                     `**Set:** ${orderData.chosenSet.name} ($${orderData.chosenSet.price})\n\n` +
-                                     `Payment proof is attached.`;
+                                    `**From User:** ${event.senderID}\n` +
+                                    `**Email:** ${orderData.email}\n` +
+                                    `**Password:** ${orderData.password}\n` +
+                                    `**Set:** ${orderData.chosenSet.name} ($${orderData.chosenSet.price})\n\n` +
+                                    `Payment proof is attached.`;
                 
                 await api.sendMessage({
                     body: orderMessage,
@@ -87,9 +95,9 @@ module.exports.handleReply = async function({ api, event, handleReply, models })
 };
 
 module.exports.run = async function({ api, event }) {
-    api.sendMessage("Let's start your order. First, please enter the email address for your new account.", event.threadID, (err, info) => {
+    api.sendMessage("Let's start your order. First, please reply to this message with the email address for your new account.", event.threadID, (err, info) => {
         global.client.handleReply.push({
-            name: this.config.name,
+            name: module.exports.config.name,
             messageID: info.messageID,
             author: event.senderID,
             step: "GET_EMAIL",
