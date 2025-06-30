@@ -16,7 +16,7 @@ module.exports.handleReply = async function({ api, event, handleReply, models })
 };
 
 module.exports.run = async function({ api, event, models }) {
-    const Set = models.get('sets');
+    const Set = models.sets;
     const allSets = await Set.findAll();
     if (allSets.length === 0) return api.sendMessage("There are no sets to delete.", event.threadID);
 
