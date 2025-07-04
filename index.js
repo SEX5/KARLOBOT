@@ -1,4 +1,5 @@
-// --- DEPENDENCIES ---
+// --- index.js (UPDATED FOR RENDER DEPLOYMENT) ---
+
 const login = require("fca-unofficial");
 const fs = require("fs");
 const express = require("express");
@@ -13,8 +14,6 @@ try {
     console.error("--> FATAL ERROR: config.json not found. Please create one based on the example.");
     process.exit(1);
 }
-
-const appStatePath = "appstate.json";
 
 // --- DYNAMIC MESSAGES FROM CONFIG ---
 const menuMessage = `👋 Hello! Welcome to ${config.botName}.
@@ -48,13 +47,24 @@ GCash for Payment: ${config.adminInfo.gcash}`;
 
 const fallbackMessage = "❓ Sorry, I didn’t understand that.\nPlease type ‘menu’ to see options.";
 
+const appStatePath = "appstate.json";
+
 // --- LOGIN AND BOT LOGIC ---
 function startBot() {
-    let loginOptions;
-    if (fs.existsSync(appStatePath)) {
-        console.log("--> Logging in with saved appstate...");
-        loginOptions = { appState: JSON.parse(fs.readFileSync(appStatePath, 'utf8')) };
-    } else {
+    let loginOptions = {};
+
+    // PRIORITY: Use environment variable for appstate if it exists
+    if (process.env.APPSTATE) {
+        console.log("--> Logging in with environment variable APPSTATE...");
+        loginOptions.appState = JSON.parse(process.env.APPSTATE);
+    }
+    // FALLBACK: Use local appstate.json file
+    else if (fs.existsSync(appStatePath)) {
+        console.log("--> Logging in with saved appstate.json file...");
+        loginOptions.appState = JSON.parse(fs.readFileSync(appStatePath, 'utf8'));
+    }
+    // LAST RESORT: Use credentials from config.json
+    else {
         console.log("--> Logging in with credentials...");
         loginOptions = { email: config.credentials.email, password: config.credentials.password };
     }
@@ -63,62 +73,48 @@ function startBot() {
         if (err) {
             console.error("--> Login failed:", err.error);
             if (err.error === 'login-approval') {
-                console.log("--> Enter the 2FA code you received:");
-                process.stdin.once('data', (data) => {
-                    err.continue(data.toString().trim());
-                });
-            } else {
-                 if (fs.existsSync(appStatePath)) {
-                     fs.unlinkSync(appStatePath);
-                     console.log("--> Deleted invalid appstate.json. Please restart the bot to log in with credentials.");
-                 }
-                 process.exit(1);
+                console.log("--> 2FA is required. Cannot handle this on a server. Please generate appstate.json locally and set the APPSTATE environment variable on your hosting platform.");
             }
-            return;
+            return process.exit(1); // Exit if login fails
         }
 
+        // Save the session state for local development, but it won't be used by Render
         fs.writeFileSync(appStatePath, JSON.stringify(api.getAppState(), null, 2));
         console.log(`--> Logged in as ${api.getCurrentUserID()}!`);
 
         api.listenMqtt((err, event) => {
-            if (err) return console.error("--> Listen error:", err);
+            if (err) {
+                console.error("--> Listen error:", err);
+                // If listen error is 'Not logged in', restart the bot process
+                if (err.error === 'Not logged in') {
+                    console.error("--> Session appears to be invalid. Restarting bot...");
+                    process.exit(1); // Exit with an error code, Render should restart it.
+                }
+                return;
+            }
 
-            // Filter for valid messages in private chats only
-            if (event.type !== "message" || !event.body || event.isGroup) {
+            if (event.type !== "message" || !event.body || event.isGroup || event.senderID === api.getCurrentUserID()) {
                 return;
             }
 
             const message = event.body.toLowerCase().trim();
-            const senderID = event.senderID;
+            console.log(`Received message from ${event.senderID}: "${message}"`);
 
-            // Don't reply to yourself
-            if (senderID === api.getCurrentUserID()) {
-                return;
-            }
-
-            console.log(`Received message from ${senderID}: "${message}"`);
-
-            // Main menu navigation logic
             if (['hi', 'hello', 'menu'].includes(message)) {
                 api.sendMessage(menuMessage, event.threadID, event.messageID);
             }
-            // 1. View Products
             else if (message === "1" || message.includes("view product")) {
                 api.sendMessage(productsMessage, event.threadID, event.messageID);
             }
-            // 2. Check Prices
             else if (message === "2" || message.includes("check price")) {
                 api.sendMessage(pricesMessage, event.threadID, event.messageID);
             }
-            // 3. Place an Order
             else if (message === "3" || message.includes("place an order")) {
                 api.sendMessage(orderMessage, event.threadID, event.messageID);
             }
-            // 4. Contact Admin
             else if (message === "4" || message.includes("contact admin")) {
                 api.sendMessage(adminMessage, event.threadID, event.messageID);
             }
-            // Fallback for unrecognized commands
             else {
                 api.sendMessage(fallbackMessage, event.threadID, event.messageID);
             }
@@ -126,7 +122,7 @@ function startBot() {
     });
 }
 
-// --- UPTIME SERVER (for services like Replit, Glitch, etc.) ---
+// --- UPTIME SERVER ---
 const app = express();
 const port = process.env.PORT || 3000;
 app.get('/', (req, res) => res.send(`${config.botName} is online!`));
