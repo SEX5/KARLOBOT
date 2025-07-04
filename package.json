@@ -1,8 +1,7 @@
-// --- package.json (CORRECTED AND COMPLETE) ---
 {
-  "name": "karlobot-shop",
+  "name": "xplicit-shop-bot",
   "version": "1.0.0",
-  "description": "A Facebook Messenger shop bot.",
+  "description": "A Facebook Messenger bot for an online shop.",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,13 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "axios": "^0.26.1",
-    "chalk": "^4.1.2",
     "express": "^4.19.2",
-    "fca-priyansh": "^18.0.0",
-    "fs-extra": "^10.1.0",
-    "moment-timezone": "^0.5.45",
-    "sequelize": "^6.37.3",
-    "sqlite3": "^5.1.7"
+    "fca-unofficial": "^1.3.10"
   }
 }
