@@ -1,0 +1,6 @@
+# Ignore session state and sensitive files
+appstate.json
+node_modules
+
+# Ignore local config if you create one
+config.local.json
