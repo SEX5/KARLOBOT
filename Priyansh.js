@@ -1,6 +1,6 @@
 // --- Priyansh.js (FINAL CORRECTED VERSION) ---
 
-const { readdirSync, readFileSync, writeFileSync, existsSync } = require("fs-extra");
+const { readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } = require("fs-extra");
 const { join, resolve } = require("path");
 const logger = require("./utils/log.js");
 const login = require("fca-unofficial");
@@ -27,7 +27,7 @@ try {
     return logger.loader("Cannot load config.json! " + e.message, "error");
 }
 
-// --- INITIALIZE DATABASE (Step 2 - THE FIX IS HERE) ---
+// --- INITIALIZE DATABASE (Step 2 - MOVED TO HERE) ---
 const { Sequelize, sequelize } = require("./includes/database")(global.config.DATABASE);
 
 // --- LOGIN FUNCTION ---
@@ -35,15 +35,29 @@ function onBotLogin(models) {
     const appStateFile = resolve(join(global.client.mainPath, global.config.APPSTATEPATH || "appstate.json"));
     let loginOptions = {};
 
-    if (existsSync(appStateFile)) {
+    // Prioritize Environment Variable (for hosting) then fallback to file
+    if (process.env.APPSTATE) {
+        try {
+            loginOptions.appstate = JSON.parse(process.env.APPSTATE);
+            logger.loader("Logging in with APPSTATE from environment variable...");
+        } catch (e) {
+            return logger.loader("Failed to parse APPSTATE environment variable. " + e, "error");
+        }
+    }
+    // Fallback to appstate.json file
+    else if (existsSync(appStateFile)) {
         try {
             loginOptions.appstate = JSON.parse(readFileSync(appStateFile, 'utf8'));
+            logger.loader("Logging in with appstate.json file...");
         } catch (e) {
-            fs.unlinkSync(appStateFile);
-            return logger.loader("Corrupted appstate.json, deleted. Please login with credentials.", "error");
+            unlinkSync(appStateFile); // Delete corrupted file
+            return logger.loader("Corrupted appstate.json, deleted. Please login again with credentials.", "error");
         }
-    } else {
+    }
+    // Fallback to credentials (for local first-time login)
+    else {
         loginOptions = { email: global.config.EMAIL, password: global.config.PASSWORD };
+        logger.loader("No appstate found. Logging in with credentials...");
     }
     
     login(loginOptions, (loginError, api) => {
@@ -61,10 +75,12 @@ function onBotLogin(models) {
             return;
         }
 
+        // Save the fresh session state back to a local file (for local use)
         writeFileSync(appStateFile, JSON.stringify(api.getAppState(), null, 4));
         api.setOptions(global.config.FCAOption);
         global.client.api = api;
 
+        // Load Commands
         const commandPath = join(global.client.mainPath, 'Priyansh/commands');
         const commandFiles = readdirSync(commandPath).filter(file => file.endsWith('.js'));
         for (const file of commandFiles) {
@@ -81,6 +97,7 @@ function onBotLogin(models) {
         logger.loader(`Loaded ${global.client.commands.size} commands.`);
         logger.loader(`Bot is ready. Startup time: ${((Date.now() - global.client.timeStart) / 1000).toFixed()}s`);
 
+        // Start Listener
         const listener = require('./includes/listen')({ api, models });
         api.listenMqtt((err, event) => {
             if (err) return console.error("Listen MQTT Error:", err);
@@ -94,13 +111,16 @@ function onBotLogin(models) {
     try {
         await sequelize.authenticate();
         
+        // Define the 'sets' model directly on the sequelize instance
         const setsModel = sequelize.define('sets', {
             name: { type: Sequelize.STRING, primaryKey: true, allowNull: false },
             price: { type: Sequelize.FLOAT, allowNull: false },
             description: { type: Sequelize.TEXT, allowNull: true }
         });
-        // You can add more models here if needed in the future
-        // const usersModel = sequelize.define('users', { ... });
+        // We will also add the users table from the original logic for compatibility
+        const usersModel = sequelize.define('users', {
+            userID: { type: Sequelize.STRING, primaryKey: true, allowNull: false }
+        });
 
         await sequelize.sync({ force: false });
 
