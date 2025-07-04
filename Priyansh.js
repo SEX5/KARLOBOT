@@ -1,11 +1,11 @@
-// --- Priyansh.js (FINAL NORMAL OPERATION VERSION) ---
-// (This is the same as the one from our previous successful discussion)
+// --- Priyansh.js (FINAL, CORRECTED VERSION) ---
 
-const { readdirSync, readFileSync, writeFileSync, existsSync, unlinkSync } = require("fs-extra");
+const { readdirSync, readFileSync, writeFileSync, existsSync } = require("fs-extra");
 const { join, resolve } = require("path");
 const logger = require("./utils/log.js");
-const login = require("fca-unofficial");
+const login = require("fca-priyansh");
 
+// --- GLOBAL OBJECTS ---
 global.client = {
     commands: new Map(),
     cooldowns: new Map(),
@@ -18,26 +18,28 @@ global.client = {
 global.utils = require("./utils");
 global.config = {};
 
+// --- LOAD CONFIGURATION ---
 try {
     const configValue = require(global.client.configPath);
-    Object.assign(global.config, configValue);
+    for (const key in configValue) global.config[key] = configValue[key];
     logger.loader("Config loaded successfully!");
 } catch (e) {
-    return logger.loader("Cannot load config.json! " + e.message, "error");
+    return logger.loader("Cannot load config.json! " + e, "error");
 }
 
+// --- INITIALIZE DATABASE ---
 const { Sequelize, sequelize } = require("./includes/database")(global.config.DATABASE);
 
-function onBotLogin(models) {
+// --- LOGIN FUNCTION ---
+function onBotLogin({ models }) {
     const appStateFile = resolve(join(global.client.mainPath, global.config.APPSTATEPATH || "appstate.json"));
     let loginOptions = {};
 
     if (existsSync(appStateFile)) {
         try {
-            loginOptions.appstate = JSON.parse(readFileSync(appStateFile, 'utf8'));
+            loginOptions.appState = JSON.parse(readFileSync(appStateFile, 'utf8'));
         } catch (e) {
-            unlinkSync(appStateFile);
-            return logger.loader("Corrupted appstate.json, deleted. Please login again with credentials.", "error");
+            return logger.loader("Could not parse appstate.json. Please login again.", "error");
         }
     } else {
         loginOptions = { email: global.config.EMAIL, password: global.config.PASSWORD };
@@ -46,9 +48,16 @@ function onBotLogin(models) {
     login(loginOptions, (loginError, api) => {
         if (loginError) {
             if (loginError.error === 'login-approval') {
-                console.log("2FA is required. Please run locally first to generate appstate.json.");
+                console.log("Enter the 2FA code you received:");
+                process.stdin.once('data', (data) => {
+                    try {
+                        loginError.continue(data.toString().trim());
+                    } catch(e) { console.error("2FA submission failed:", e) }
+                });
+            } else {
+                 return console.error("Login Error:", loginError);
             }
-            return console.error("Login Error:", loginError);
+            return;
         }
 
         writeFileSync(appStateFile, JSON.stringify(api.getAppState(), null, 4));
@@ -60,9 +69,8 @@ function onBotLogin(models) {
         for (const file of commandFiles) {
             try {
                 const command = require(join(commandPath, file));
-                if (command.config && command.run) {
-                    global.client.commands.set(command.config.name, command);
-                }
+                if (!command.config || !command.run) continue;
+                global.client.commands.set(command.config.name, command);
             } catch (e) {
                 logger.loader(`Cannot load command ${file}: ${e}`, "error");
             }
@@ -79,20 +87,26 @@ function onBotLogin(models) {
     });
 }
 
+// --- DATABASE CONNECTION AND BOT STARTUP ---
 (async () => {
     try {
         await sequelize.authenticate();
+        
+        // Define the 'sets' model directly on the sequelize instance
         const setsModel = sequelize.define('sets', {
             name: { type: Sequelize.STRING, primaryKey: true, allowNull: false },
             price: { type: Sequelize.FLOAT, allowNull: false },
             description: { type: Sequelize.TEXT, allowNull: true }
         });
+
         await sequelize.sync({ force: false });
+
         logger.loader("Database connected and models synchronized.", '[ DATABASE ]');
         
-        onBotLogin({ models: sequelize.models });
+        // Pass the defined model to the bot
+        onBotLogin({ models: { sets: setsModel } });
 
     } catch (error) {
-        logger.loader(`Database or startup failed: ${error}`, '[ ERROR ]');
+        logger.loader(`Database connection failed: ${error}`, '[ DATABASE ]');
     }
 })();
