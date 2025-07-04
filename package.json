@@ -1,22 +1,22 @@
+// --- package.json (CORRECTED AND COMPLETE) ---
 {
-  "name": "karlobot",
+  "name": "karlobot-shop",
   "version": "1.0.0",
-  "description": "",
+  "description": "A Facebook Messenger shop bot.",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js"
   },
-  "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "axios": "^0.26.1",
     "chalk": "^4.1.2",
     "express": "^4.19.2",
-    "fca-unofficial": "^1.3.10",
+    "fca-priyansh": "^18.0.0",
     "fs-extra": "^10.1.0",
-    "sequelize": "^6.21.4",
-    "sqlite3": "^5.1.1"
+    "moment-timezone": "^0.5.45",
+    "sequelize": "^6.37.3",
+    "sqlite3": "^5.1.7"
   }
 }
