@@ -1,77 +1,48 @@
+// --- index.js (UPDATED TO REMOVE HTML DEPENDENCY) ---
+
 const { spawn } = require("child_process");
-const axios = require("axios");
 const logger = require("./utils/log");
 
 ///////////////////////////////////////////////////////////
 //========= Create website for dashboard/uptime =========//
 ///////////////////////////////////////////////////////////
-
 const express = require('express');
-const path = require('path');
-
 const app = express();
 const port = process.env.PORT || 8080;
 
-// Serve the index.html file
-app.get('/', function (req, res) {
-    res.sendFile(path.join(__dirname, '/index.html'));
+// Serve a simple text response instead of a file
+app.get('/', (req, res) => {
+    res.send('Bot is running!');
 });
 
-// Start the server and add error handling
 app.listen(port, () => {
-    logger(`Server is running on port ${port}...`, "[ Starting ]");
-}).on('error', (err) => {
-    if (err.code === 'EACCES') {
-        logger(`Permission denied. Cannot bind to port ${port}.`, "[ Error ]");
-    } else {
-        logger(`Server error: ${err.message}`, "[ Error ]");
-    }
+    logger(`Uptime server is running on port ${port}`, "[ UPTIME ]");
 });
+
 
 /////////////////////////////////////////////////////////
 //========= Create start bot and make it loop =========//
 /////////////////////////////////////////////////////////
-
-// Initialize global restart counter
-global.countRestart = global.countRestart || 0;
-
-function startBot(message) {
-    if (message) logger(message, "[ Starting ]");
-
+function startBot() {
     const child = spawn("node", ["--trace-warnings", "--async-stack-traces", "Priyansh.js"], {
         cwd: __dirname,
         stdio: "inherit",
         shell: true
     });
 
-    child.on("close", (codeExit) => {
-        if (codeExit !== 0 && global.countRestart < 5) {
-            global.countRestart += 1;
-            logger(`Bot exited with code ${codeExit}. Restarting... (${global.countRestart}/5)`, "[ Restarting ]");
+    child.on("close", (code) => {
+        // A code of 1 is a general error, we'll try to restart.
+        if (code === 1) {
+            logger("Bot process exited. Restarting...", "[ RESTART ]");
             startBot();
         } else {
-            logger(`Bot stopped after ${global.countRestart} restarts.`, "[ Stopped ]");
+             logger("Bot has stopped.", "[ STOPPED ]");
         }
     });
 
     child.on("error", (error) => {
-        logger(`An error occurred: ${JSON.stringify(error)}`, "[ Error ]");
+        logger(`An error occurred in the bot process: ${JSON.stringify(error)}`, "[ ERROR ]");
     });
 };
 
-////////////////////////////////////////////////
-//========= Check update from Github =========//
-////////////////////////////////////////////////
-
-axios.get("https://raw.githubusercontent.com/priyanshu192/bot/main/package.json")
-    .then((res) => {
-        logger(res.data.name, "[ NAME ]");
-        logger(`Version: ${res.data.version}`, "[ VERSION ]");
-        logger(res.data.description, "[ DESCRIPTION ]");
-    })
-    .catch((err) => {
-        logger(`Failed to fetch update info: ${err.message}`, "[ Update Error ]");
-    });
-
-// Start the bot
 startBot();
