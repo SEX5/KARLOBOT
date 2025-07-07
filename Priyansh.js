@@ -1,9 +1,9 @@
-// --- Priyansh.js (FINAL, CORRECTED VERSION) ---
+// --- Priyansh.js (FINAL CORRECTED VERSION) ---
 
 const { readdirSync, readFileSync, writeFileSync, existsSync } = require("fs-extra");
 const { join, resolve } = require("path");
 const logger = require("./utils/log.js");
-const login = require("fca-priyansh");
+const login = require("fca-unofficial");
 
 // --- GLOBAL OBJECTS ---
 global.client = {
@@ -18,28 +18,29 @@ global.client = {
 global.utils = require("./utils");
 global.config = {};
 
-// --- LOAD CONFIGURATION ---
+// --- LOAD CONFIGURATION (Step 1) ---
 try {
     const configValue = require(global.client.configPath);
-    for (const key in configValue) global.config[key] = configValue[key];
+    Object.assign(global.config, configValue);
     logger.loader("Config loaded successfully!");
 } catch (e) {
-    return logger.loader("Cannot load config.json! " + e, "error");
+    return logger.loader("Cannot load config.json! " + e.message, "error");
 }
 
-// --- INITIALIZE DATABASE ---
+// --- INITIALIZE DATABASE (Step 2 - THE FIX IS HERE) ---
 const { Sequelize, sequelize } = require("./includes/database")(global.config.DATABASE);
 
 // --- LOGIN FUNCTION ---
-function onBotLogin({ models }) {
+function onBotLogin(models) {
     const appStateFile = resolve(join(global.client.mainPath, global.config.APPSTATEPATH || "appstate.json"));
     let loginOptions = {};
 
     if (existsSync(appStateFile)) {
         try {
-            loginOptions.appState = JSON.parse(readFileSync(appStateFile, 'utf8'));
+            loginOptions.appstate = JSON.parse(readFileSync(appStateFile, 'utf8'));
         } catch (e) {
-            return logger.loader("Could not parse appstate.json. Please login again.", "error");
+            fs.unlinkSync(appStateFile);
+            return logger.loader("Corrupted appstate.json, deleted. Please login with credentials.", "error");
         }
     } else {
         loginOptions = { email: global.config.EMAIL, password: global.config.PASSWORD };
@@ -69,8 +70,9 @@ function onBotLogin({ models }) {
         for (const file of commandFiles) {
             try {
                 const command = require(join(commandPath, file));
-                if (!command.config || !command.run) continue;
-                global.client.commands.set(command.config.name, command);
+                if (command.config && command.run) {
+                    global.client.commands.set(command.config.name, command);
+                }
             } catch (e) {
                 logger.loader(`Cannot load command ${file}: ${e}`, "error");
             }
@@ -92,21 +94,22 @@ function onBotLogin({ models }) {
     try {
         await sequelize.authenticate();
         
-        // Define the 'sets' model directly on the sequelize instance
         const setsModel = sequelize.define('sets', {
             name: { type: Sequelize.STRING, primaryKey: true, allowNull: false },
             price: { type: Sequelize.FLOAT, allowNull: false },
             description: { type: Sequelize.TEXT, allowNull: true }
         });
+        // You can add more models here if needed in the future
+        // const usersModel = sequelize.define('users', { ... });
 
         await sequelize.sync({ force: false });
 
         logger.loader("Database connected and models synchronized.", '[ DATABASE ]');
         
-        // Pass the defined model to the bot
-        onBotLogin({ models: { sets: setsModel } });
+        // Pass all defined models to the bot
+        onBotLogin({ models: sequelize.models });
 
     } catch (error) {
-        logger.loader(`Database connection failed: ${error}`, '[ DATABASE ]');
+        logger.loader(`Database or startup failed: ${error}`, '[ ERROR ]');
     }
 })();
